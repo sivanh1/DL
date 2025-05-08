@@ -1,49 +1,63 @@
-# Step 1: Import required libraries
-import tensorflow as tf
-from tensorflow.keras.preprocessing.image import ImageDataGenerator
+import torch
+import torch.nn as nn
+import matplotlib.pyplot as plt
 
-# Step 2: Preprocess the images (rescale pixel values to [0, 1])
-train_gen = ImageDataGenerator(rescale=1./255)
-val_gen = ImageDataGenerator(rescale=1./255)
-
-# Step 3: Load the training and validation images
-train_data = train_gen.flow_from_directory(
-    'data/train',               # Folder should contain 'cats' and 'dogs' subfolders
-    target_size=(150, 150),     # Resize all images to 150x150
-    batch_size=20,              # Process 20 images at a time
-    class_mode='binary'         # 0 = cat, 1 = dog
+# Generator Network
+G = nn.Sequential(
+    nn.Linear(20, 128),
+    nn.ReLU(),
+    nn.Linear(128, 784),
+    nn.Sigmoid()
 )
 
-val_data = val_gen.flow_from_directory(
-    'data/validation',          # Validation folder with same structure
-    target_size=(150, 150),
-    batch_size=20,
-    class_mode='binary'
+# Discriminator Network
+D = nn.Sequential(
+    nn.Linear(784, 128),
+    nn.ReLU(),
+    nn.Linear(128, 1),
+    nn.Sigmoid()
 )
 
-# Step 4: Build the CNN model
-model = tf.keras.models.Sequential([
-    tf.keras.layers.Conv2D(32, (3, 3), activation='relu', input_shape=(150, 150, 3)),
-    tf.keras.layers.MaxPooling2D(2, 2),
+# Loss and Optimizers
+loss_fn = nn.BCELoss()
+opt_G = torch.optim.Adam(G.parameters(), lr=0.0002)
+opt_D = torch.optim.Adam(D.parameters(), lr=0.0002)
 
-    tf.keras.layers.Conv2D(64, (3, 3), activation='relu'),
-    tf.keras.layers.MaxPooling2D(2, 2),
+# Training Loop
+for epoch in range(100):
+    # Generate fake data
+    z = torch.randn(32, 20)
+    fake_data = G(z)
 
-    tf.keras.layers.Flatten(),
-    tf.keras.layers.Dense(128, activation='relu'),
-    tf.keras.layers.Dense(1, activation='sigmoid')  # Binary output
-])
+    # Real data (random for this example)
+    real_data = torch.rand(32, 784)
 
-# Step 5: Compile the model
-model.compile(
-    loss='binary_crossentropy',
-    optimizer='adam',
-    metrics=['accuracy']
-)
+    # Labels
+    real_labels = torch.ones(32, 1)
+    fake_labels = torch.zeros(32, 1)
 
-# Step 6: Train the model
-model.fit(
-    train_data,
-    epochs=5,
-    validation_data=val_data
-)
+    # Train Discriminator
+    D_real = D(real_data)
+    D_fake = D(fake_data.detach())
+    loss_D = loss_fn(D_real, real_labels) + loss_fn(D_fake, fake_labels)
+
+    opt_D.zero_grad()
+    loss_D.backward()
+    opt_D.step()
+
+    # Train Generator
+    D_fake = D(fake_data)
+    loss_G = loss_fn(D_fake, real_labels)
+
+    opt_G.zero_grad()
+    loss_G.backward()
+    opt_G.step()
+
+    if epoch % 10 == 0:
+        print(f"Epoch {epoch}: Loss_D = {loss_D.item():.4f}, Loss_G = {loss_G.item():.4f}")
+
+# Visualize one generated sample
+sample = G(torch.randn(1, 20)).view(28, 28).detach()
+plt.imshow(sample, cmap='gray')
+plt.title("Generated Image")
+plt.show()
