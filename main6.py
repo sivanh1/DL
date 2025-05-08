@@ -1,50 +1,63 @@
-# Step 1: Install required packages (run this in your terminal or Jupyter notebook)
-# !pip install tensorflow tensorflow-hub opencv-python
-
-# Step 2: Import libraries
-import tensorflow as tf
-import tensorflow_hub as hub
-import numpy as np
-import cv2
+import torch
+import torch.nn as nn
 import matplotlib.pyplot as plt
 
-# Step 3: Load and preprocess one image
-def load_image(img_path):
-    img = tf.io.read_file(img_path)
-    img = tf.image.decode_jpeg(img, channels=3)
-    img = tf.image.resize(img, (384, 384)) / 255.0  # Resize and normalize
-    return img
+# Generator Network
+G = nn.Sequential(
+    nn.Linear(20, 128),
+    nn.ReLU(),
+    nn.Linear(128, 784),
+    nn.Sigmoid()
+)
 
-img_path = 'cow.jpg'  # Replace with your image file
-image = load_image(img_path)
-input_tensor = tf.expand_dims(image, 0)  # Add batch dimension
+# Discriminator Network
+D = nn.Sequential(
+    nn.Linear(784, 128),
+    nn.ReLU(),
+    nn.Linear(128, 1),
+    nn.Sigmoid()
+)
 
-# Step 4: Load pre-trained object detection model
-model = hub.load("https://tfhub.dev/tensorflow/efficientdet/lite2/detection/1")
+# Loss and Optimizers
+loss_fn = nn.BCELoss()
+opt_G = torch.optim.Adam(G.parameters(), lr=0.0002)
+opt_D = torch.optim.Adam(D.parameters(), lr=0.0002)
 
-# Step 5: Run detection
-output = model(input_tensor)
-boxes = output["detection_boxes"][0].numpy()
-classes = output["detection_classes"][0].numpy().astype(np.int32)
-scores = output["detection_scores"][0].numpy()
+# Training Loop
+for epoch in range(100):
+    # Generate fake data
+    z = torch.randn(32, 20)
+    fake_data = G(z)
 
-# Step 6: Draw boxes on the image
-labels = {1: 'person', 17: 'cat', 18: 'dog', 20: 'cow'}  # Add more as needed
+    # Real data (random for this example)
+    real_data = torch.rand(32, 784)
 
-img_np = np.array(image * 255, dtype=np.uint8)
-h, w = img_np.shape[:2]
+    # Labels
+    real_labels = torch.ones(32, 1)
+    fake_labels = torch.zeros(32, 1)
 
-for box, cls, score in zip(boxes, classes, scores):
-    if score < 0.3:
-        continue
-    y1, x1, y2, x2 = box
-    start = (int(x1 * w), int(y1 * h))
-    end = (int(x2 * w), int(y2 * h))
-    cv2.rectangle(img_np, start, end, (0, 255, 0), 2)
-    label = f"{labels.get(cls, 'ID:'+str(cls))} ({score:.2f})"
-    cv2.putText(img_np, label, (start[0], start[1]-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
+    # Train Discriminator
+    D_real = D(real_data)
+    D_fake = D(fake_data.detach())
+    loss_D = loss_fn(D_real, real_labels) + loss_fn(D_fake, fake_labels)
 
-# Step 7: Show result
-plt.imshow(img_np)
-plt.axis("off")
+    opt_D.zero_grad()
+    loss_D.backward()
+    opt_D.step()
+
+    # Train Generator
+    D_fake = D(fake_data)
+    loss_G = loss_fn(D_fake, real_labels)
+
+    opt_G.zero_grad()
+    loss_G.backward()
+    opt_G.step()
+
+    if epoch % 10 == 0:
+        print(f"Epoch {epoch}: Loss_D = {loss_D.item():.4f}, Loss_G = {loss_G.item():.4f}")
+
+# Visualize one generated sample
+sample = G(torch.randn(1, 20)).view(28, 28).detach()
+plt.imshow(sample, cmap='gray')
+plt.title("Generated Image")
 plt.show()
