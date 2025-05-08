@@ -1,35 +1,48 @@
-# Import required libraries
-import tensorflow as tf
-from tensorflow.keras import layers
-from tensorflow.keras.datasets import imdb
+# Install required libraries
+# pip install tensorflow numpy
+
+import numpy as np
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Embedding, SimpleRNN, Dense
+from tensorflow.keras.preprocessing.text import Tokenizer
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 
-# Step 1: Load IMDB sentiment dataset
-# Keep only the 10,000 most frequent words
-vocab_size = 10000
-max_length = 200
+# Sample data
+texts = [
+    "I love this movie!", "This is an amazing product", "Worst experience ever",
+    "I have this", "Fantastic service", "So bad I want my money back"
+]
+labels = np.array([1, 1, 0, 1, 1, 0])
 
-(x_train, y_train), (x_test, y_test) = imdb.load_data(num_words=vocab_size)
+# Tokenization and padding
+tokenizer = Tokenizer(num_words=1000)
+tokenizer.fit_on_texts(texts)
+sequences = tokenizer.texts_to_sequences(texts)
+x = pad_sequences(sequences, padding='post')
+y = labels
 
-# Step 2: Pad all sequences to the same length
-x_train = pad_sequences(x_train, maxlen=max_length)
-x_test = pad_sequences(x_test, maxlen=max_length)
-
-# Step 3: Build the RNN model
-model = tf.keras.Sequential([
-    layers.Embedding(input_dim=vocab_size, output_dim=32, input_length=max_length),  # Word embedding
-    layers.SimpleRNN(32),                                                            # RNN layer
-    layers.Dense(1, activation='sigmoid')                                            # Output: 0 (neg) or 1 (pos)
+# Build model
+model = Sequential([
+    Embedding(input_dim=1000, output_dim=64),
+    SimpleRNN(64, activation='tanh'),
+    Dense(1, activation='sigmoid')
 ])
+model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
 
-# Step 4: Compile the model
-model.compile(optimizer='adam',
-              loss='binary_crossentropy',
-              metrics=['accuracy'])
+# Train model
+model.fit(x, y, epochs=5, batch_size=2)
 
-# Step 5: Train the model
-model.fit(x_train, y_train, epochs=5, validation_split=0.2)
+# Evaluate model
+loss, accuracy = model.evaluate(x, y)
+print(f"\nTest accuracy on training data: {accuracy:.2f}")
 
-# Step 6: Evaluate on test data
-loss, accuracy = model.evaluate(x_test, y_test)
-print("Test Accuracy:", accuracy)
+# Test predictions
+test_texts = ["I really enjoyed this", "Worst experience ever"]
+test_seq = tokenizer.texts_to_sequences(test_texts)
+test_x = pad_sequences(test_seq, padding='post')
+predictions = model.predict(test_x)
+
+# Show predictions
+for text, pred in zip(test_texts, predictions):
+    sentiment = "Positive" if pred > 0.5 else "Negative"
+    print(f"{text} => Sentiment: {sentiment} (Confidence: {pred[0]:.2f})")
