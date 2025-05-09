@@ -1,63 +1,24 @@
-import torch
-import torch.nn as nn
+import tensorflow as tf
+import numpy as np
 import matplotlib.pyplot as plt
 
-# Generator Network
-G = nn.Sequential(
-    nn.Linear(20, 128),
-    nn.ReLU(),
-    nn.Linear(128, 784),
-    nn.Sigmoid()
-)
+# Load data
+(x_train, _), _ = tf.keras.datasets.mnist.load_data()
+x_train = (x_train.astype("float32") - 127.5) / 127.5
+x_train = np.expand_dims(x_train, -1)
 
-# Discriminator Network
-D = nn.Sequential(
-    nn.Linear(784, 128),
-    nn.ReLU(),
-    nn.Linear(128, 1),
-    nn.Sigmoid()
-)
+# Generator
+g = tf.keras.Sequential([
+    tf.keras.layers.Dense(7*7*64, input_shape=(100,)),
+    tf.keras.layers.Reshape((7, 7, 64)),
+    tf.keras.layers.UpSampling2D(),
+    tf.keras.layers.Conv2D(1, 3, padding="same", activation="tanh"),
+    tf.keras.layers.UpSampling2D()
+])
 
-# Loss and Optimizers
-loss_fn = nn.BCELoss()
-opt_G = torch.optim.Adam(G.parameters(), lr=0.0002)
-opt_D = torch.optim.Adam(D.parameters(), lr=0.0002)
-
-# Training Loop
-for epoch in range(100):
-    # Generate fake data
-    z = torch.randn(32, 20)
-    fake_data = G(z)
-
-    # Real data (random for this example)
-    real_data = torch.rand(32, 784)
-
-    # Labels
-    real_labels = torch.ones(32, 1)
-    fake_labels = torch.zeros(32, 1)
-
-    # Train Discriminator
-    D_real = D(real_data)
-    D_fake = D(fake_data.detach())
-    loss_D = loss_fn(D_real, real_labels) + loss_fn(D_fake, fake_labels)
-
-    opt_D.zero_grad()
-    loss_D.backward()
-    opt_D.step()
-
-    # Train Generator
-    D_fake = D(fake_data)
-    loss_G = loss_fn(D_fake, real_labels)
-
-    opt_G.zero_grad()
-    loss_G.backward()
-    opt_G.step()
-
-    if epoch % 10 == 0:
-        print(f"Epoch {epoch}: Loss_D = {loss_D.item():.4f}, Loss_G = {loss_G.item():.4f}")
-
-# Visualize one generated sample
-sample = G(torch.randn(1, 20)).view(28, 28).detach()
-plt.imshow(sample, cmap='gray')
-plt.title("Generated Image")
+# Train 1 step (quick & dirty)
+noise = np.random.normal(0, 1, (1, 100))
+img = g(noise, training=False).numpy()[0, :, :, 0]
+plt.imshow((img + 1) / 2, cmap='gray')
+plt.axis('off')
 plt.show()
