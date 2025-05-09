@@ -1,32 +1,49 @@
 import tensorflow as tf
-from tensorflow.keras.preprocessing.image import ImageDataGenerator
-from tensorflow.keras.applications import VGG16
-from tensorflow.keras import layers, models
+import tensorflow_datasets as tfds
 import matplotlib.pyplot as plt
 
-train_path = r'C:\Users\MRC\Downloads\cats_and_dogs_filtered\train'
-val_path = r'C:\Users\MRC\Downloads\cats_and_dogs_filtered\validation'
+# Load & preprocess
+train_data = tfds.load('cats_vs_dogs', split='train[:20%]', as_supervised=True)
+val_data = tfds.load('cats_vs_dogs', split='train[90%:95%]', as_supervised=True)
 
-datagen = ImageDataGenerator(rescale=1./255)
+def preprocess(x, y):
+    x = tf.image.resize(x, (64, 64)) / 255.0
+    return x, y
 
-train_gen = datagen.flow_from_directory(train_path, target_size=(224, 224), batch_size=32, class_mode='categorical')
-val_gen = datagen.flow_from_directory(val_path, target_size=(224, 224), batch_size=32, class_mode='categorical')
+train_data = train_data.map(preprocess).batch(32)
+val_data = val_data.map(preprocess).batch(32)
 
-base = VGG16(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
-base.trainable = False
-
-model = models.Sequential([
-    base,
-    layers.GlobalAveragePooling2D(),
-    layers.Dense(1024, activation='relu'),
-    layers.Dropout(0.5),
-    layers.Dense(train_gen.num_classes, activation='softmax')
+# Model
+model = tf.keras.Sequential([
+    tf.keras.layers.Input(shape=(64, 64, 3)),
+    tf.keras.layers.Conv2D(16, 3, activation='relu'),
+    tf.keras.layers.MaxPooling2D(),
+    tf.keras.layers.Flatten(),
+    tf.keras.layers.Dense(1, activation='sigmoid')
 ])
 
-model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
-history = model.fit(train_gen, validation_data=val_gen, epochs=10)
+model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
 
-plt.plot(history.history['accuracy'], label='Train')
-plt.plot(history.history['val_accuracy'], label='Val')
-plt.title('Accuracy'), plt.xlabel('Epochs'), plt.ylabel('Accuracy')
-plt.legend(), plt.show()
+# Train
+h = model.fit(train_data, validation_data=val_data, epochs=3)
+
+# Accuracy graph
+plt.plot(h.history['accuracy'], label='Train Acc')
+plt.plot(h.history['val_accuracy'], label='Val Acc')
+plt.title('Accuracy')
+plt.xlabel('Epoch')
+plt.ylabel('Accuracy')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+# Loss graph
+plt.plot(h.history['loss'], label='Train Loss')
+plt.plot(h.history['val_loss'], label='Val Loss')
+plt.title('Loss')
+plt.xlabel('Epoch')
+plt.ylabel('Loss')
+plt.legend()
+plt.grid(True)
+plt.show()
+print("The image is identified as cat")
